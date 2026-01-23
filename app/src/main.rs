@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
 use gpui::{
     actions, div, px, rgb, size, App, Application, Bounds, Context as ViewContext, KeyBinding,
-    Window, WindowBounds, WindowOptions, prelude::*,
+    Window, WindowBounds, WindowOptions, prelude::*, FocusHandle, ClickEvent, Modifiers,
 };
 use salsa_core::ipc::{read_message, write_message, Request, Response, DEFAULT_SOCKET_PATH};
 use salsa_core::lint::lint_snippets;
@@ -215,12 +215,6 @@ fn run_ui() -> anyhow::Result<()> {
             KeyBinding::new("cmd-k", OpenSalsaBar, None),
             KeyBinding::new("cmd-n", NewSnippet, None),
         ]);
-        cx.on_action(|_: &OpenSalsaBar, _cx| {
-            println!("Open Salsa Bar (placeholder)");
-        });
-        cx.on_action(|_: &NewSnippet, _cx| {
-            println!("New Snippet (placeholder)");
-        });
 
         let bounds = Bounds::centered(None, size(px(900.), px(600.0)), cx);
         cx.open_window(
@@ -228,7 +222,7 @@ fn run_ui() -> anyhow::Result<()> {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            |_window, cx| cx.new(|_cx| SalsaView::new()),
+            |_window, cx| cx.new(SalsaView::new),
         )
         .unwrap();
         cx.activate(true);
@@ -239,17 +233,86 @@ fn run_ui() -> anyhow::Result<()> {
 
 struct SalsaView {
     snippets: Vec<Snippet>,
+    search_query: String,
+    search_focus: FocusHandle,
 }
 
 impl SalsaView {
-    fn new() -> Self {
+    fn new(cx: &mut ViewContext<Self>) -> Self {
         let snippets = load_snippets().unwrap_or_default();
-        Self { snippets }
+        Self {
+            snippets,
+            search_query: String::new(),
+            search_focus: cx.focus_handle(),
+        }
+    }
+
+    fn on_search_key_down(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        _window: &mut Window,
+        _cx: &mut ViewContext<Self>,
+    ) {
+        if event.keystroke.modifiers != Modifiers::none() {
+            return;
+        }
+
+        match event.keystroke.key.as_str() {
+            "backspace" => {
+                self.search_query.pop();
+            }
+            _ => {
+                if let Some(ch) = event.keystroke.key_char.as_ref() {
+                    if ch.len() == 1 {
+                        self.search_query.push_str(ch);
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_open_salsa_bar(
+        &mut self,
+        _action: &OpenSalsaBar,
+        window: &mut Window,
+        _cx: &mut ViewContext<Self>,
+    ) {
+        self.search_focus.focus(window);
+    }
+
+    fn on_new_snippet_action(
+        &mut self,
+        _action: &NewSnippet,
+        _window: &mut Window,
+        _cx: &mut ViewContext<Self>,
+    ) {
+        println!("New Snippet action (placeholder)");
+    }
+
+    fn on_new_snippet_click(
+        &mut self,
+        _event: &ClickEvent,
+        _window: &mut Window,
+        _cx: &mut ViewContext<Self>,
+    ) {
+        println!("New Snippet clicked (placeholder)");
     }
 }
 
 impl gpui::Render for SalsaView {
     fn render(&mut self, _window: &mut Window, _cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
+        let search_text = if self.search_query.is_empty() {
+            "Search snippets".to_string()
+        } else {
+            self.search_query.clone()
+        };
+        let search_color = if self.search_query.is_empty() {
+            rgb(0x888888)
+        } else {
+            rgb(0x222222)
+        };
+        let filtered = filter_snippets(&self.snippets, &self.search_query);
+
         let top_bar = div()
             .flex()
             .items_center()
@@ -266,34 +329,46 @@ impl gpui::Render for SalsaView {
                     .gap_2()
                     .child(
                         div()
+                            .id("search_input")
+                            .track_focus(&self.search_focus)
+                            .focusable()
                             .px_3()
                             .py_1()
                             .rounded_sm()
                             .bg(rgb(0xf5f5f5))
-                            .text_color(rgb(0x666666))
-                            .child("Search snippets"),
+                            .text_color(search_color)
+                            .child(search_text)
+                            .on_key_down(_cx.listener(Self::on_search_key_down))
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                _cx.listener(|this, _event, window, _cx| {
+                                    this.search_focus.focus(window);
+                                }),
+                            ),
                     ),
             )
-            .child(button("New Snippet"));
+            .child(button("New Snippet", _cx.listener(Self::on_new_snippet_click)));
 
         let list = div()
             .flex()
             .flex_col()
             .gap_2()
             .p_4()
-            .child(render_rows(&self.snippets));
+            .child(render_rows(&filtered));
 
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(rgb(0xffffff))
+            .on_action(_cx.listener(Self::on_open_salsa_bar))
+            .on_action(_cx.listener(Self::on_new_snippet_action))
             .child(top_bar)
             .child(list)
     }
 }
 
-fn render_rows(snippets: &[Snippet]) -> impl gpui::IntoElement {
+fn render_rows(snippets: &[&Snippet]) -> impl gpui::IntoElement {
     let mut container = div().flex().flex_col().gap_2();
 
     if snippets.is_empty() {
@@ -335,8 +410,9 @@ fn render_rows(snippets: &[Snippet]) -> impl gpui::IntoElement {
     container.into_any()
 }
 
-fn button(text: &str) -> impl gpui::IntoElement {
+fn button(text: &str, on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> impl gpui::IntoElement {
     div()
+        .id("button_new_snippet")
         .px_3()
         .py_1()
         .bg(rgb(0xf2f2f2))
@@ -344,11 +420,27 @@ fn button(text: &str) -> impl gpui::IntoElement {
         .border_color(rgb(0xdddddd))
         .rounded_sm()
         .child(text.to_string())
+        .on_click(on_click)
 }
 
 fn load_snippets() -> anyhow::Result<Vec<Snippet>> {
     let store = Store::open(default_db_path()?)?;
     store.list_snippets()
+}
+
+fn filter_snippets<'a>(snippets: &'a [Snippet], query: &str) -> Vec<&'a Snippet> {
+    if query.trim().is_empty() {
+        return snippets.iter().collect();
+    }
+
+    let query = query.to_lowercase();
+    snippets
+        .iter()
+        .filter(|snippet| {
+            snippet.trigger.to_lowercase().contains(&query)
+                || snippet.label.to_lowercase().contains(&query)
+        })
+        .collect()
 }
 
 fn default_db_path() -> anyhow::Result<PathBuf> {
