@@ -65,6 +65,43 @@ fn scopes_overlap(a: &Snippet, b: &Snippet) -> bool {
         .any(|rule| app_rule_overlaps(rule, &b.scope.app_rules))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{CaseMode, ContentType, DelimiterMode, ScopeRule};
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn snippet(trigger: &str, priority: i32) -> Snippet {
+        Snippet {
+            id: Uuid::new_v4(),
+            trigger: trigger.to_string(),
+            label: "label".to_string(),
+            content: "content".to_string(),
+            content_type: ContentType::PlainText,
+            tags: vec![],
+            enabled: true,
+            case_mode: CaseMode::Preserve,
+            delimiter_mode: DelimiterMode::Any,
+            scope: ScopeRule {
+                app_rules: vec![],
+                profile_id: None,
+            },
+            priority,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn detects_duplicate_trigger() {
+        let a = snippet(";sig", 0);
+        let b = snippet(";sig", 1);
+        let issues = lint_snippets(&[a, b]);
+        assert!(issues.iter().any(|issue| issue.kind == LintKind::DuplicateTrigger));
+    }
+}
+
 fn app_rule_overlaps(rule: &AppRule, others: &[AppRule]) -> bool {
     if !rule.enabled {
         return false;

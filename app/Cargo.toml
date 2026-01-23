@@ -9,3 +9,6 @@ serde_json = { workspace = true }
 salsa-core = { path = "../core" }
 directories = { workspace = true }
 salsa-store = { path = "../store" }
+clap = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

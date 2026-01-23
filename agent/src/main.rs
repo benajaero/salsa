@@ -4,14 +4,22 @@ use std::os::unix::net::{UnixListener, UnixStream};
 
 use salsa_core::ipc::{read_message, write_message, Request, Response, DEFAULT_SOCKET_PATH};
 
+mod agent;
+
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|arg| arg == "--serve") {
-        run_server(DEFAULT_SOCKET_PATH)
-    } else {
-        println!("salsa-agent starting... use --serve to start the IPC server");
-        Ok(())
+        return run_server(DEFAULT_SOCKET_PATH);
     }
+
+    if args.iter().any(|arg| arg == "--run") {
+        let agent = agent::Agent::new();
+        agent.run();
+        return Ok(());
+    }
+
+    println!("salsa-agent starting... use --serve or --run");
+    Ok(())
 }
 
 fn run_server(socket_path: &str) -> anyhow::Result<()> {
