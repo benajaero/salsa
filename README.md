@@ -22,11 +22,26 @@ Salsa turns short triggers (like `;addr`) into longer text anywhere you type. It
 ## Quick Start (Community Build)
 
 ```bash
-cargo build --release
-cargo run -p salsa-app
+rustup toolchain install nightly
+rustup run nightly cargo build --release
+rustup run nightly cargo run -p salsa-app
 ```
 
 You will need Accessibility (and possibly Input Monitoring) permissions for system-wide expansion.
+
+## Current Status
+
+- GPUI shell UI is wired with a snippet list and search field (placeholder interactions).
+- CLI supports add/list/delete/lint for local snippets.
+- Agent scaffolding exists; event capture/injection is not wired yet.
+
+## CLI Examples
+
+```bash
+rustup run nightly cargo run -p salsa-app -- add --trigger ";addr" --label "Address" --content "123 Main St"
+rustup run nightly cargo run -p salsa-app -- list
+rustup run nightly cargo run -p salsa-app -- lint
+```
 
 ## Official Builds
 
