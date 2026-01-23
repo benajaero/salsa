@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Rust
         if: steps.cargo.outputs.present == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt, clippy
 

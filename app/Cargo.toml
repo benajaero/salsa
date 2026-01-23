@@ -12,3 +12,4 @@ salsa-store = { path = "../store" }
 clap = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+gpui = { version = "0.2.2", default-features = false, features = ["macos-blade"] }

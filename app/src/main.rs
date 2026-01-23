@@ -4,11 +4,17 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
+use gpui::{
+    actions, div, px, rgb, size, App, Application, Bounds, Context as ViewContext, KeyBinding,
+    Window, WindowBounds, WindowOptions, prelude::*,
+};
 use salsa_core::ipc::{read_message, write_message, Request, Response, DEFAULT_SOCKET_PATH};
 use salsa_core::lint::lint_snippets;
 use salsa_core::model::{CaseMode, ContentType, DelimiterMode, ScopeRule, Snippet};
 use salsa_store::Store;
 use uuid::Uuid;
+
+actions!(salsa, [OpenSalsaBar, NewSnippet]);
 
 #[derive(Parser)]
 #[command(name = "salsa-app", version, about = "Salsa app CLI")]
@@ -204,8 +210,145 @@ fn lint_db() -> anyhow::Result<()> {
 }
 
 fn run_ui() -> anyhow::Result<()> {
-    println!("UI shell not wired yet. Use --help for CLI commands.");
+    Application::new().run(|cx: &mut App| {
+        cx.bind_keys([
+            KeyBinding::new("cmd-k", OpenSalsaBar, None),
+            KeyBinding::new("cmd-n", NewSnippet, None),
+        ]);
+        cx.on_action(|_: &OpenSalsaBar, _cx| {
+            println!("Open Salsa Bar (placeholder)");
+        });
+        cx.on_action(|_: &NewSnippet, _cx| {
+            println!("New Snippet (placeholder)");
+        });
+
+        let bounds = Bounds::centered(None, size(px(900.), px(600.0)), cx);
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                ..Default::default()
+            },
+            |_window, cx| cx.new(|_cx| SalsaView::new()),
+        )
+        .unwrap();
+        cx.activate(true);
+    });
+
     Ok(())
+}
+
+struct SalsaView {
+    snippets: Vec<Snippet>,
+}
+
+impl SalsaView {
+    fn new() -> Self {
+        let snippets = load_snippets().unwrap_or_default();
+        Self { snippets }
+    }
+}
+
+impl gpui::Render for SalsaView {
+    fn render(&mut self, _window: &mut Window, _cx: &mut ViewContext<Self>) -> impl gpui::IntoElement {
+        let top_bar = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .px_4()
+            .py_3()
+            .border_b_1()
+            .border_color(rgb(0xe5e5e5))
+            .bg(rgb(0xffffff))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .px_3()
+                            .py_1()
+                            .rounded_sm()
+                            .bg(rgb(0xf5f5f5))
+                            .text_color(rgb(0x666666))
+                            .child("Search snippets"),
+                    ),
+            )
+            .child(button("New Snippet"));
+
+        let list = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_4()
+            .child(render_rows(&self.snippets));
+
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .bg(rgb(0xffffff))
+            .child(top_bar)
+            .child(list)
+    }
+}
+
+fn render_rows(snippets: &[Snippet]) -> impl gpui::IntoElement {
+    let mut container = div().flex().flex_col().gap_2();
+
+    if snippets.is_empty() {
+        return container
+            .child(
+                div()
+                    .p_4()
+                    .rounded_sm()
+                    .bg(rgb(0xf8f8f8))
+                    .text_color(rgb(0x666666))
+                    .child("No snippets yet"),
+            )
+            .into_any();
+    }
+
+    for snippet in snippets {
+        let row = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .p_3()
+            .rounded_sm()
+            .bg(rgb(0xf8f8f8))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(snippet.trigger.clone())
+                    .child(
+                        div()
+                            .text_color(rgb(0x666666))
+                            .child(snippet.label.clone()),
+                    ),
+            );
+
+        container = container.child(row);
+    }
+
+    container.into_any()
+}
+
+fn button(text: &str) -> impl gpui::IntoElement {
+    div()
+        .px_3()
+        .py_1()
+        .bg(rgb(0xf2f2f2))
+        .border_1()
+        .border_color(rgb(0xdddddd))
+        .rounded_sm()
+        .child(text.to_string())
+}
+
+fn load_snippets() -> anyhow::Result<Vec<Snippet>> {
+    let store = Store::open(default_db_path()?)?;
+    store.list_snippets()
 }
 
 fn default_db_path() -> anyhow::Result<PathBuf> {
