@@ -1,7 +1,14 @@
+//! Deterministic trigger matcher.
+//!
+//! Uses a pair of reverse tries (exact + case-folded) to find the best matching
+//! snippet for a typed buffer. Match is O(trigger length) in the worst case,
+//! and O(1) average when no prefix matches.
+
 use std::collections::HashMap;
 
 use crate::model::{CaseMode, DelimiterMode, Snippet};
 
+/// Per-keystroke context used during matching.
 #[derive(Debug, Clone)]
 pub struct MatchContext {
     pub app_bundle_id: String,
@@ -10,6 +17,7 @@ pub struct MatchContext {
     pub ime_active: bool,
 }
 
+/// Result of a successful match: which snippet fired and what to expand to.
 #[derive(Debug, Clone)]
 pub struct MatchResult {
     pub snippet_id: uuid::Uuid,
@@ -17,6 +25,7 @@ pub struct MatchResult {
     pub content: String,
 }
 
+/// Trie-backed matcher with priority ordering and scope checks.
 pub struct Matcher {
     snippets: Vec<Snippet>,
     exact_trie: Vec<TrieNode>,
@@ -25,6 +34,7 @@ pub struct Matcher {
 }
 
 impl Matcher {
+    /// Build a matcher from a list of snippets. Sorts by priority internally.
     pub fn from_snippets(mut snippets: Vec<Snippet>) -> Self {
         snippets.sort_by(|a, b| compare_snippets(a, b));
 
@@ -70,6 +80,9 @@ impl Matcher {
         }
     }
 
+    /// Attempt to match the tail of `buffer` against loaded snippets.
+    ///
+    /// Returns `None` when the context is secure, IME is active, or no trigger matches.
     pub fn match_buffer(&self, buffer: &str, ctx: &MatchContext) -> Option<MatchResult> {
         if ctx.is_secure || ctx.ime_active {
             return None;

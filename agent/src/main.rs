@@ -1,3 +1,9 @@
+//! salsa-agent entry point.
+//!
+//! Supports two modes:
+//! - `--serve`: Unix-domain IPC server for UI communication.
+//! - `--run`: Background event-tap + injection loop (not yet wired).
+
 use std::env;
 use std::fs;
 use std::os::unix::net::{UnixListener, UnixStream};

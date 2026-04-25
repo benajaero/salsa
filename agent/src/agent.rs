@@ -1,5 +1,8 @@
 use salsa_macos::permissions::{self, PermissionStatus};
 
+/// Background agent that owns the event tap, matcher, and injection loop.
+///
+/// The agent is a separate process so a UI crash does not kill expansion.
 pub struct Agent {
     pub accessibility: PermissionStatus,
     pub input_monitoring: PermissionStatus,

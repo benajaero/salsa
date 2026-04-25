@@ -1,20 +1,30 @@
+//! Lint rules for snippet collections.
+//!
+//! Detects duplicate triggers and priority shadowing so users can resolve
+//! conflicts before they cause surprising expansions.
+
 use std::collections::HashMap;
 
 use crate::model::{AppRule, Snippet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LintKind {
+    /// Two or more snippets share the same trigger text.
     DuplicateTrigger,
+    /// A higher-priority snippet masks a lower-priority one in the same scope.
     ShadowedByPriority,
 }
 
+/// A single lint finding.
 #[derive(Debug, Clone)]
 pub struct LintIssue {
     pub kind: LintKind,
     pub trigger: String,
+    /// All snippet IDs involved in this issue.
     pub snippet_ids: Vec<uuid::Uuid>,
 }
 
+/// Scan a snippet collection for structural problems.
 pub fn lint_snippets(snippets: &[Snippet]) -> Vec<LintIssue> {
     let mut issues = Vec::new();
 

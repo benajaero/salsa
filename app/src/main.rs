@@ -1,3 +1,7 @@
+//! salsa-app — GPUI frontend and CLI entry point.
+//!
+//! Subcommands: ping, list, add, delete, lint, ui (default).
+
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 

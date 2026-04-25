@@ -1,3 +1,9 @@
+//! Versioned SQLite schema migrations.
+//!
+//! Each migration is a single SQL batch. The `schema_migrations` table tracks
+//! what has already been applied. Migrations are applied in version order
+//! inside a single `Connection::execute_batch` call.
+
 pub struct Migration {
     pub version: i64,
     pub sql: &'static str,

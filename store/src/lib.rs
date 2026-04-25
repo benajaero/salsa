@@ -1,3 +1,8 @@
+//! SQLite persistence layer for Salsa.
+//!
+//! Handles schema migrations, snippet CRUD, profiles, bundles, and expansion
+//! history. Foreign keys are enforced. Migrations are idempotent and versioned.
+
 use std::path::Path;
 
 use anyhow::Context;
@@ -11,11 +16,13 @@ use uuid::Uuid;
 
 mod migrations;
 
+/// Primary database handle. Clone is not implemented; share via `Arc<Store>` if needed.
 pub struct Store {
     conn: Connection,
 }
 
 impl Store {
+    /// Open (or create) a database file and run pending migrations.
     pub fn open(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
@@ -27,6 +34,7 @@ impl Store {
         &self.conn
     }
 
+    /// Insert a new snippet and its app-rules.
     pub fn insert_snippet(&self, snippet: &Snippet) -> anyhow::Result<()> {
         let delimiter_mode = delimiter_mode_label(&snippet.delimiter_mode);
         let delimiter_custom = match &snippet.delimiter_mode {
@@ -62,6 +70,7 @@ impl Store {
         Ok(())
     }
 
+    /// Load all snippets with their app-rules hydrated.
     pub fn list_snippets(&self) -> anyhow::Result<Vec<Snippet>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, trigger, label, content, content_type, tags, enabled, case_mode, delimiter_mode, delimiter_custom, scope_profile_id, priority, created_at, updated_at
@@ -79,6 +88,7 @@ impl Store {
         Ok(snippets)
     }
 
+    /// Replace an existing snippet and its app-rules (delete then re-insert rules).
     pub fn update_snippet(&self, snippet: &Snippet) -> anyhow::Result<()> {
         let delimiter_mode = delimiter_mode_label(&snippet.delimiter_mode);
         let delimiter_custom = match &snippet.delimiter_mode {
@@ -129,6 +139,7 @@ impl Store {
         Ok(())
     }
 
+    /// Hard-delete a snippet. App-rules are removed via `ON DELETE CASCADE`.
     pub fn delete_snippet(&self, snippet_id: Uuid) -> anyhow::Result<()> {
         self.conn.execute(
             "DELETE FROM snippets WHERE id = ?1",
@@ -137,6 +148,7 @@ impl Store {
         Ok(())
     }
 
+    /// Load all profiles.
     pub fn list_profiles(&self) -> anyhow::Result<Vec<Profile>> {
         let mut stmt = self
             .conn
@@ -157,6 +169,7 @@ impl Store {
         Ok(profiles)
     }
 
+    /// Load all bundles.
     pub fn list_bundles(&self) -> anyhow::Result<Vec<Bundle>> {
         let mut stmt = self
             .conn
@@ -178,6 +191,7 @@ impl Store {
         Ok(bundles)
     }
 
+    /// Insert a profile.
     pub fn insert_profile(&self, profile: &Profile) -> anyhow::Result<()> {
         self.conn.execute(
             "INSERT INTO profiles (id, name, enabled) VALUES (?1, ?2, ?3)",
@@ -186,6 +200,7 @@ impl Store {
         Ok(())
     }
 
+    /// Insert a bundle.
     pub fn insert_bundle(&self, bundle: &Bundle) -> anyhow::Result<()> {
         self.conn.execute(
             "INSERT INTO bundles (id, name, description, enabled) VALUES (?1, ?2, ?3, ?4)",
@@ -199,6 +214,7 @@ impl Store {
         Ok(())
     }
 
+    /// Append an expansion event to history.
     pub fn insert_history(&self, history: &ExpansionHistory) -> anyhow::Result<()> {
         self.conn.execute(
             "INSERT INTO expansion_history (id, snippet_id, app_bundle_id, timestamp, retained_content)
